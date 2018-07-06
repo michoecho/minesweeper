@@ -5,10 +5,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-
-//Screen dimension constants
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
+#include <time.h>
+#include <assert.h>
+#include "minesweeper.h"
 
 //Starts up SDL and creates window
 bool init();
@@ -26,11 +25,15 @@ SDL_Window* gWindow = NULL;
 SDL_Renderer* gRenderer = NULL;
 
 //Current displayed texture
-SDL_Texture* gTexture = NULL;
+SDL_Texture* gTileTexture = NULL;
 
 //The image we will load and show on the screen
 SDL_Surface* gHelloWorld = NULL;
-	
+
+int tiles_x = 30;
+int tiles_y = 16;
+int tile_size = 24;
+
 char *gResPath = NULL;
 
 bool init()
@@ -52,7 +55,8 @@ bool init()
 	if (!gResPath) gResPath = SDL_strdup("./");
 
 	//Create window
-	SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN, &gWindow, &gRenderer);
+	SDL_CreateWindowAndRenderer(tile_size * tiles_x, tile_size * tiles_y,
+			SDL_WINDOW_SHOWN, &gWindow, &gRenderer);
 	if (gWindow == NULL || gRenderer == NULL) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
 				"Window or renderer could not be created! SDL_Error: %s\n", SDL_GetError());
@@ -107,12 +111,12 @@ SDL_Texture* loadTexture(char* relPath)
 
 bool loadMedia()
 {
-	char *helloWorld = "res/hello_world.bmp";
-	gTexture = loadTexture(helloWorld);
+	char *tiles = "res/tiles.png";
+	gTileTexture = loadTexture(tiles);
 
-	if (gTexture == NULL) {
+	if (gTileTexture == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
-				"Unable to load image %s! SDL Error: %s\n", helloWorld, SDL_GetError());
+				"Unable to load image %s! SDL Error: %s\n", tiles, SDL_GetError());
 		return false;
 	}
 	return true;
@@ -134,8 +138,92 @@ void finish()
 	SDL_Quit();
 }
 
+enum crops {
+	HIDDEN = 0,
+	GOOD_FLAG = 1,
+	BAD_FLAG = 2,
+	GOOD_MINE = 3,
+	BAD_MINE = 4,
+	ZERO = 5,
+};
+
+int chooseSprite (Tile *targetTile, bool gameOver) {
+	int sprite;
+	if (!gameOver) {
+		if (targetTile->state == FLAGGED) {
+			sprite = GOOD_FLAG;
+		} else if (targetTile->state == COVERED) {
+			sprite = HIDDEN;
+		} else {
+			sprite = ZERO + targetTile->minedNeighbours;
+		}
+	} else {
+		if (targetTile->state == FLAGGED) {
+			sprite = targetTile->mined ? GOOD_FLAG : BAD_FLAG;
+		} else if (targetTile->state == COVERED) {
+			sprite = targetTile->mined ? GOOD_MINE : HIDDEN;
+		} else {
+			sprite = targetTile->mined ? BAD_MINE : ZERO + targetTile->minedNeighbours;
+		}
+	}
+	return sprite;
+}
+
+
+void renderBoard(Board *b) {
+	for (int x = 0; x < b->width; ++x)
+	for (int y = 0; y < b->height; ++y) {
+		Tile *targetTile = getTile(b, x, y);
+		int sprite = chooseSprite(targetTile, b->state != RUNNING);
+		SDL_Rect spriteRect = {64 * sprite, 0, 64, 64};
+		SDL_Rect dstRect = {tile_size * x, tile_size * y, tile_size, tile_size};
+		SDL_RenderCopy(gRenderer, gTileTexture, &spriteRect, &dstRect);
+	}
+}
+
+void renderHighlight() {
+	int x, y;
+	SDL_GetMouseState(&x, &y);
+	x = x / tile_size;
+	y = y / tile_size;
+	SDL_Rect rect = {x * tile_size, y * tile_size, tile_size, tile_size};
+	SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0xFF, 0xFF );
+	SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_ADD);
+	SDL_RenderDrawRect(gRenderer, &rect);
+}
+
+bool isNumber(char *string) {
+	if (!string || !*string) return false;
+	while (*string) {
+		if (!isdigit(*string)) return false;
+		++string;
+	}
+	return true;
+}
+
 int main(int argc, char* args[])
 {
+	if (argc != 5) {
+		fprintf(stdout, "Usage: minesweeper tiles_x tiles_y mine_count tile_size\n");
+		return 1;
+	}
+	for (int i = 1; i <= 4; ++i) {
+		if (!isNumber(args[i])) {
+			fprintf(stdout, "Usage: minesweeper tiles_x tiles_y mine_count tile_size\n");
+			return 1;
+		}
+	}
+
+	tiles_x = strtol(args[1], NULL, 10);
+	tiles_y = strtol(args[2], NULL, 10);
+	int mine_count = strtol(args[3], NULL, 10);
+	tile_size = strtol(args[4], NULL, 10);
+
+	if (mine_count > tiles_x * tiles_y || tiles_x <= 0 || tiles_y <= 0 || tile_size <= 0) {
+		fprintf(stdout, "Invalid options.");
+		return 1;
+	}
+
 	//Start up SDL and create window
 	if (!init()) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
@@ -152,6 +240,9 @@ int main(int argc, char* args[])
 	//Main loop flag
 	bool quit = false;
 
+	Board *board = makeBoard(tiles_x,tiles_y);
+	populateBoard(board, mine_count, time(NULL));
+
 	//Main loop
 	while (!quit) {
 		//Event loop
@@ -159,9 +250,20 @@ int main(int argc, char* args[])
 			if (e.type == SDL_QUIT) {
 				quit = true;
 			} else if (e.type == SDL_KEYDOWN) {
-				switch (e.key.keysym.sym)
-				{
-					case SDLK_q: quit = true; break;
+				switch (e.key.keysym.sym) {
+				case SDLK_q:
+					quit = true;
+					break;
+				case SDLK_r:
+					freeBoard(board);
+					board = makeBoard(tiles_x, tiles_y);
+					populateBoard(board, mine_count, time(NULL));
+				}
+			} else if (e.type == SDL_MOUSEBUTTONUP && board->state == RUNNING) {
+				if (e.button.button == SDL_BUTTON_LEFT) {
+					uncoverTile(board, e.button.x / tile_size, e.button.y / tile_size);
+				} else if (e.button.button == SDL_BUTTON_RIGHT) {
+					flagTile(board, e.button.x / tile_size, e.button.y / tile_size);
 				}
 			}
 		}
@@ -171,13 +273,15 @@ int main(int argc, char* args[])
 		SDL_RenderClear(gRenderer);
 
 		//Render texture to screen
-		SDL_RenderCopy(gRenderer, gTexture, NULL, NULL);
+		renderBoard(board);
+		renderHighlight();
 
 		//Update screen
 		SDL_RenderPresent(gRenderer);
 	}
 
 finish:
+	freeBoard(board);
 	//Free resources and close SDL
 	finish();
 

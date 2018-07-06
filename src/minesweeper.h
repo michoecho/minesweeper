@@ -13,12 +13,13 @@ enum GameState {
 	RUNNING,
 };
 
-typedef Tile {
+typedef struct Tile {
 	enum TileState state;
 	bool mined;
+	int minedNeighbours;
 } Tile;
 
-typedef Board {
+typedef struct Board {
 	enum GameState state;
 	int width;
 	int height;
@@ -40,5 +41,5 @@ int minedNeighbours(Board *board, int x, int y);
 
 void uncoverTile(Board *board, int x, int y);
 
-void FlagTile(Board *board, int x, int y);
+void flagTile(Board *board, int x, int y);
 #endif

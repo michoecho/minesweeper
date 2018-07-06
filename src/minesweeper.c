@@ -10,8 +10,10 @@ makeBoard(int width, int height)
 	board->height = height;
 	board->state = RUNNING;
 	board->tiles = malloc(width * sizeof(Tile*));
-	for (int i = 0; i < width; ++i) {
-		board->tiles[i] = malloc(height * sizeof(Tile));
+	for (int x = 0; x < width; ++x) {
+		board->tiles[x] = malloc(height * sizeof(Tile));
+		for (int y = 0; y < height; ++y)
+			board->tiles[x][y] = (Tile){COVERED, false};
 	}
 	return board;
 }
@@ -32,7 +34,7 @@ bool inBoard(Board *board, int x, int y)
 Tile *
 getTile(Board *board, int x, int y)
 {
-	if (x >= 0 && x < board->width && y >=0 && y < board->height) return NULL;
+	if (!(x >= 0 && x < board->width && y >=0 && y < board->height)) return NULL;
 	return &(board->tiles[x][y]);
 }
 
@@ -49,6 +51,9 @@ void populateBoard(Board *board, int numOfMines, unsigned seed)
 		}	
 	}
 	board->remainingTiles = board->height * board->width - numOfMines;
+	for (int x = 0; x < board->width; ++x)
+	for (int y = 0; y < board->height; ++y)
+		getTile(board, x, y)->minedNeighbours = minedNeighbours(board, x, y);
 }
 
 
@@ -58,14 +63,14 @@ int minedNeighbours(Board *board, int x, int y)
 	for (int dx = -1; dx <= 1; ++dx)
 	for (int dy = -1; dy <= 1; ++dy) {
 		if (dx == 0 && dy == 0) continue;
-		Tile *targetTile = getTile(board, x, y);
+		Tile *targetTile = getTile(board, x+dx, y+dy);
 		if (targetTile && targetTile->mined)
 			++cnt;
 	}
 	return cnt;
 }
 
-void FlagTile(Board *board, int x, int y)
+void flagTile(Board *board, int x, int y)
 {
 	Tile *targetTile = getTile(board, x, y);
 	if (!targetTile) return;
@@ -100,9 +105,11 @@ void uncoverTile(Board *board, int x, int y)
 		return;
 	}
 
-	for (int dx = -1; dx <= 1; ++dx)
-	for (int dy = -1; dy <= 1; ++dy) {
-		if (dx == 0 && dy == 0) continue;
-		uncoverTile(board, x + dx, y + dy);
+	if (targetTile->minedNeighbours == 0) {
+		for (int dx = -1; dx <= 1; ++dx)
+		for (int dy = -1; dy <= 1; ++dy) {
+			if (dx == 0 && dy == 0) continue;
+			uncoverTile(board, x + dx, y + dy);
+		}
 	}
 }	
