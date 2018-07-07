@@ -9,6 +9,7 @@
 #include <time.h>
 #include <assert.h>
 #include "minesweeper.h"
+#include "stopwatch.h"
 
 bool init();
 bool loadMedia();
@@ -17,6 +18,7 @@ void finish();
 SDL_Window* gWindow = NULL;
 SDL_Renderer* gRenderer = NULL;
 SDL_Texture* gTileTexture = NULL;
+SDL_Texture* gScreen = NULL;
 char *gResPath = NULL;
 
 int tiles_x = 30;
@@ -25,7 +27,6 @@ int tile_size = 24;
 
 bool init()
 {
-	//Initialize SDL
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
 
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -41,22 +42,27 @@ bool init()
 
 	gResPath = SDL_GetBasePath();
 	if (!gResPath) gResPath = SDL_strdup("./");
-
-	//Create window
-	SDL_CreateWindowAndRenderer(tile_size * tiles_x, tile_size * tiles_y + 30,
-			SDL_WINDOW_SHOWN, &gWindow, &gRenderer);
-	if (gWindow == NULL || gRenderer == NULL) {
+	
+	gWindow = SDL_CreateWindow("Minesweeper", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+			tile_size * tiles_x, tile_size * tiles_y + 30, SDL_WINDOW_SHOWN);
+	if (gWindow == NULL) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
-				"Window or renderer could not be created! SDL_Error: %s\n", SDL_GetError());
+				"Window could not be created! SDL_Error: %s\n", SDL_GetError());
+		return false;
+	}
+	
+	gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_PRESENTVSYNC);
+	if (gRenderer == NULL) {
+		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
+				"Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
 		return false;
 	}
 
+	gScreen = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, 
+		tile_size * tiles_x, tile_size * tiles_y);
+
 	SDL_SetWindowTitle(gWindow, "Minesweeper");
 	
-	//Initialize renderer color
-	SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
-
-	//Initialize PNG loading
 	int imgFlags = IMG_INIT_PNG;
 	if(!(IMG_Init(imgFlags) & imgFlags))
 	{
@@ -155,8 +161,8 @@ int chooseSprite (Tile *targetTile, bool gameOver) {
 	return sprite;
 }
 
-
 void renderBoard(Board *b) {
+	SDL_SetRenderTarget(gRenderer, gScreen);
 	for (int x = 0; x < b->width; ++x)
 	for (int y = 0; y < b->height; ++y) {
 		Tile *targetTile = getTile(b, x, y);
@@ -165,6 +171,11 @@ void renderBoard(Board *b) {
 		SDL_Rect dstRect = {tile_size * x, tile_size * y, tile_size, tile_size};
 		SDL_RenderCopy(gRenderer, gTileTexture, &spriteRect, &dstRect);
 	}
+	SDL_SetRenderTarget(gRenderer, NULL);
+}
+
+void displayBoard(Board *b) {
+	SDL_RenderCopy(gRenderer, gScreen, NULL, NULL);
 }
 
 void renderHighlight() {
@@ -228,6 +239,12 @@ int main(int argc, char* args[])
 
 	Board *board = makeBoard(tiles_x, tiles_y, mine_count);
 	resetBoard(board, time(NULL));
+	renderBoard(board);
+
+	Stopwatch *sw = makeStopwatch();
+	unpauseStopwatch(sw);
+
+	bool paused = false;
 
 	//Main loop
 	while (!quit) {
@@ -242,12 +259,27 @@ int main(int argc, char* args[])
 					break;
 				case SDLK_r:
 					resetBoard(board, time(NULL));
+					restartStopwatch(sw);
+					unpauseStopwatch(sw);
+					paused = false;
+					renderBoard(board);
+					break;
+				case SDLK_p:
+					if (paused) {
+						unpauseStopwatch(sw);
+						paused = false;
+					} else {
+						pauseStopwatch(sw);
+						paused = true;
+					}
 				}
 			} else if (e.type == SDL_MOUSEBUTTONUP && board->state == RUNNING) {
 				if (e.button.button == SDL_BUTTON_LEFT) {
 					uncoverTile(board, e.button.x / tile_size, e.button.y / tile_size);
+					renderBoard(board);
 				} else if (e.button.button == SDL_BUTTON_RIGHT) {
 					flagTile(board, e.button.x / tile_size, e.button.y / tile_size);
+					renderBoard(board);
 				}
 			}
 		}
@@ -259,16 +291,18 @@ int main(int argc, char* args[])
 		SDL_RenderClear(gRenderer);
 
 		//Render texture to screen
-		renderBoard(board);
-		renderHighlight();
+		if (!paused) {
+			displayBoard(board);
+			renderHighlight();
+		}
 
 		//Update screen
 		SDL_RenderPresent(gRenderer);
+		SDL_Delay(16);
 	}
 
 finish:
 	freeBoard(board);
-	//Free resources and close SDL
 	finish();
 
 	return 0;
