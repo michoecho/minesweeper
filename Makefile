@@ -7,7 +7,7 @@ DEP = $(OBJ:%.o=%.d)
 CCFLAGS += -Wall
 CPPFLAGS += -I/usr/include/SDL2 -D_REENTRANT -MMD -MP -Wall -g
 LDFLAGS += -L/usr/lib
-LDLIBS += -lSDL2 -lSDL2_image
+LDLIBS += -lSDL2 -lSDL2_image -lSDL2_ttf
 
 
 all : $(BUILD_DIR)/$(BIN) src/tags

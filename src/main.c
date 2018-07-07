@@ -20,10 +20,23 @@ SDL_Renderer* gRenderer = NULL;
 SDL_Texture* gTileTexture = NULL;
 SDL_Texture* gScreen = NULL;
 char *gResPath = NULL;
+TTF_Font *gFont = NULL;
 
 int tiles_x = 30;
 int tiles_y = 16;
+int uiFontSize = 16;
+int uiBarSize = 24;
 int tile_size = 24;
+SDL_Rect boardViewport;
+SDL_Rect uiViewport;
+
+SDL_Color RED = {0xFF, 0x00, 0x00};
+SDL_Color GREEN = {0x03, 0x68, 0x0e};
+SDL_Color BLACK = {0x00, 0x00, 0x00};
+SDL_Color WHITE = {0xFF, 0xFF, 0xFF};
+
+
+int floorDiv(int a, int b) { return a / b - (a < 0); }
 
 bool init()
 {
@@ -44,7 +57,7 @@ bool init()
 	if (!gResPath) gResPath = SDL_strdup("./");
 	
 	gWindow = SDL_CreateWindow("Minesweeper", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-			tile_size * tiles_x, tile_size * tiles_y + 30, SDL_WINDOW_SHOWN);
+			boardViewport.w, boardViewport.h + uiViewport.h, SDL_WINDOW_SHOWN);
 	if (gWindow == NULL) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
 				"Window could not be created! SDL_Error: %s\n", SDL_GetError());
@@ -59,7 +72,7 @@ bool init()
 	}
 
 	gScreen = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, 
-		tile_size * tiles_x, tile_size * tiles_y);
+		boardViewport.w, boardViewport.h);
 
 	SDL_SetWindowTitle(gWindow, "Minesweeper");
 	
@@ -68,6 +81,14 @@ bool init()
 	{
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
 				"SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
+		return false;
+	}
+
+	 //Initialize SDL_ttf
+	if( TTF_Init() == -1 )
+	{
+		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
+				"SDL_ttf could not initialize! SDL_ttf Error: %s\n", TTF_GetError());
 		return false;
 	}
 
@@ -109,8 +130,16 @@ bool loadMedia()
 	gTileTexture = loadTexture(tiles);
 
 	if (gTileTexture == NULL) {
-		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
 				"Unable to load image %s! SDL Error: %s\n", tiles, SDL_GetError());
+		return false;
+	}
+	
+	gFont = TTF_OpenFont( "res/font.ttf", uiFontSize);
+	if( gFont == NULL )
+	{
+		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
+			"Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
 		return false;
 	}
 	return true;
@@ -181,6 +210,17 @@ void displayBoard(Board *b) {
 void renderHighlight() {
 	int x, y;
 	SDL_GetMouseState(&x, &y);
+	int tile_x = floorDiv(x - boardViewport.x, tile_size);
+	int tile_y = floorDiv(y - boardViewport.y, tile_size);
+	SDL_Rect rect = {tile_x * tile_size, tile_y * tile_size, tile_size, tile_size};
+	SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0x7F );
+	SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_BLEND);
+	SDL_RenderFillRect(gRenderer, &rect);
+}
+
+void renderTime() {
+	int x, y;
+	SDL_GetMouseState(&x, &y);
 	x = x / tile_size;
 	y = y / tile_size;
 	SDL_Rect rect = {x * tile_size, y * tile_size, tile_size, tile_size};
@@ -197,6 +237,47 @@ bool isNumber(char *string) {
 	}
 	return true;
 }
+
+SDL_Texture * renderText(char *text, SDL_Color color) {
+	//Render text surface
+	SDL_Surface* textSurface = TTF_RenderText_Blended( gFont, text, color);
+	if( textSurface == NULL ) {
+		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
+				"Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
+		return NULL;
+	}
+		//Create texture from surface pixels
+        SDL_Texture * texture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
+	if( texture == NULL ) {
+		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
+				"Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
+	}
+
+	SDL_FreeSurface(textSurface);
+	
+	return texture;
+}
+
+void displayTime(unsigned time, SDL_Color color) {
+	char timeText[100];
+	sprintf(timeText, "%.3f", time/1000.0);
+	SDL_Texture* timeTexture = renderText(timeText, color);
+	SDL_Rect timeField = {20, 0, 0, 0};
+	SDL_QueryTexture(timeTexture, NULL, NULL, &timeField.w, &timeField.h);
+	timeField.y = (uiViewport.h - timeField.h) / 2;
+	SDL_RenderCopy(gRenderer, timeTexture, NULL, &timeField);
+}	
+
+void displayFlagCount(Board *b) {
+	char text[100];
+	sprintf(text, "%d/%d", b->flagCount, b->mineCount);
+	SDL_Texture* texture = renderText(text, BLACK);
+	SDL_Rect field;
+	SDL_QueryTexture(texture, NULL, NULL, &field.w, &field.h);
+	field.x = uiViewport.w - field.w - 20;
+	field.y = (uiViewport.h - field.h) / 2;
+	SDL_RenderCopy(gRenderer, texture, NULL, &field);
+}	
 
 int main(int argc, char* args[])
 {
@@ -215,6 +296,8 @@ int main(int argc, char* args[])
 	tiles_y = strtol(args[2], NULL, 10);
 	int mine_count = strtol(args[3], NULL, 10);
 	tile_size = strtol(args[4], NULL, 10);
+	boardViewport = (SDL_Rect){0, uiBarSize, tiles_x * tile_size, tiles_y * tile_size};
+	uiViewport = (SDL_Rect){0, 0, tiles_x * tile_size, uiBarSize};
 
 	if (mine_count > tiles_x * tiles_y || tiles_x <= 0 || tiles_y <= 0 || tile_size <= 0) {
 		fprintf(stdout, "Invalid options.");
@@ -242,7 +325,6 @@ int main(int argc, char* args[])
 	renderBoard(board);
 
 	Stopwatch *sw = makeStopwatch();
-	unpauseStopwatch(sw);
 
 	bool paused = false;
 
@@ -260,7 +342,6 @@ int main(int argc, char* args[])
 				case SDLK_r:
 					resetBoard(board, time(NULL));
 					restartStopwatch(sw);
-					unpauseStopwatch(sw);
 					paused = false;
 					renderBoard(board);
 					break;
@@ -274,26 +355,42 @@ int main(int argc, char* args[])
 					}
 				}
 			} else if (e.type == SDL_MOUSEBUTTONUP && board->state == RUNNING) {
+				int tile_x = floorDiv(e.button.x - boardViewport.x, tile_size);
+				int tile_y = floorDiv(e.button.y - boardViewport.y, tile_size);
 				if (e.button.button == SDL_BUTTON_LEFT) {
-					uncoverTile(board, e.button.x / tile_size, e.button.y / tile_size);
+					uncoverTile(board, tile_x, tile_y);
 					renderBoard(board);
+					unpauseStopwatch(sw);
 				} else if (e.button.button == SDL_BUTTON_RIGHT) {
-					flagTile(board, e.button.x / tile_size, e.button.y / tile_size);
+					flagTile(board, tile_x, tile_y);
 					renderBoard(board);
+					unpauseStopwatch(sw);
 				}
 			}
 		}
 
 		//Clear screen
-		SDL_Rect viewport = {0, 0, tiles_x * tile_size, tiles_y * tile_size};
-		SDL_RenderSetViewport(gRenderer, &viewport);
-		SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+		SDL_RenderSetViewport(gRenderer, NULL);
+		if (board->state == RUNNING)
+			SDL_SetRenderDrawColor(gRenderer, 0xb5, 0xb5, 0xb5, 0xFF);
+		else if (board->state == WON)
+			SDL_SetRenderDrawColor(gRenderer, GREEN.r, GREEN.g, GREEN.b, 0xFF);
+		else if (board->state == LOST)
+			SDL_SetRenderDrawColor(gRenderer, RED.r, RED.g, RED.b, 0xFF);
 		SDL_RenderClear(gRenderer);
+
+		if (board->state != RUNNING)
+			pauseStopwatch(sw);
 
 		//Render texture to screen
 		if (!paused) {
+			SDL_RenderSetViewport(gRenderer, &boardViewport);
 			displayBoard(board);
 			renderHighlight();
+
+			SDL_RenderSetViewport(gRenderer, &uiViewport);
+			displayTime(readStopwatch(sw), BLACK);
+			displayFlagCount(board);
 		}
 
 		//Update screen
