@@ -23,21 +23,19 @@ typedef struct Board {
 	enum GameState state;
 	int width;
 	int height;
-	int remainingTiles;
-	Tile** tiles;
+	int coveredTiles;
+	int flagCount;
+	int mineCount;
+	Tile *tiles;
 } Board;
 
-Board * makeBoard(int width, int height);
-
-void freeBoard(Board *board); 
-
-bool inBoard(Board *board, int x, int y);
+Board * makeBoard(int width, int height, int mineCount);
 
 Tile * getTile(Board *board, int x, int y);
 
-void populateBoard(Board *board, int numOfMines, unsigned seed);
+void freeBoard(Board *board); 
 
-int minedNeighbours(Board *board, int x, int y);
+void resetBoard(Board *board, unsigned seed);
 
 void uncoverTile(Board *board, int x, int y);
 

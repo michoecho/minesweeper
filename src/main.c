@@ -1,6 +1,7 @@
 //Using SDL and standard IO
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_ttf.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -9,37 +10,24 @@
 #include <assert.h>
 #include "minesweeper.h"
 
-//Starts up SDL and creates window
 bool init();
-
-//Loads media
 bool loadMedia();
+void finish();
 
-//Frees media and shuts down SDL
-void close();
-
-//The window we'll be rendering to
 SDL_Window* gWindow = NULL;
-	
-//The window renderer
 SDL_Renderer* gRenderer = NULL;
-
-//Current displayed texture
 SDL_Texture* gTileTexture = NULL;
-
-//The image we will load and show on the screen
-SDL_Surface* gHelloWorld = NULL;
+char *gResPath = NULL;
 
 int tiles_x = 30;
 int tiles_y = 16;
 int tile_size = 24;
 
-char *gResPath = NULL;
-
 bool init()
 {
 	//Initialize SDL
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
+
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
 				"SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
@@ -55,7 +43,7 @@ bool init()
 	if (!gResPath) gResPath = SDL_strdup("./");
 
 	//Create window
-	SDL_CreateWindowAndRenderer(tile_size * tiles_x, tile_size * tiles_y,
+	SDL_CreateWindowAndRenderer(tile_size * tiles_x, tile_size * tiles_y + 30,
 			SDL_WINDOW_SHOWN, &gWindow, &gRenderer);
 	if (gWindow == NULL || gRenderer == NULL) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
@@ -124,17 +112,15 @@ bool loadMedia()
 
 void finish()
 {
-	//Deallocate surface
-	SDL_FreeSurface(gHelloWorld);
-	gHelloWorld = NULL;
+	SDL_DestroyRenderer(gRenderer);
+	gRenderer = NULL;
+	gTileTexture = NULL;
 
-	//Destroy window
 	SDL_DestroyWindow(gWindow);
 	gWindow = NULL;
 
 	SDL_free(gResPath);
 
-	//Quit SDL subsystems
 	SDL_Quit();
 }
 
@@ -187,9 +173,9 @@ void renderHighlight() {
 	x = x / tile_size;
 	y = y / tile_size;
 	SDL_Rect rect = {x * tile_size, y * tile_size, tile_size, tile_size};
-	SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0xFF, 0xFF );
-	SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_ADD);
-	SDL_RenderDrawRect(gRenderer, &rect);
+	SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0x7F );
+	SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_BLEND);
+	SDL_RenderFillRect(gRenderer, &rect);
 }
 
 bool isNumber(char *string) {
@@ -240,8 +226,8 @@ int main(int argc, char* args[])
 	//Main loop flag
 	bool quit = false;
 
-	Board *board = makeBoard(tiles_x,tiles_y);
-	populateBoard(board, mine_count, time(NULL));
+	Board *board = makeBoard(tiles_x, tiles_y, mine_count);
+	resetBoard(board, time(NULL));
 
 	//Main loop
 	while (!quit) {
@@ -255,9 +241,7 @@ int main(int argc, char* args[])
 					quit = true;
 					break;
 				case SDLK_r:
-					freeBoard(board);
-					board = makeBoard(tiles_x, tiles_y);
-					populateBoard(board, mine_count, time(NULL));
+					resetBoard(board, time(NULL));
 				}
 			} else if (e.type == SDL_MOUSEBUTTONUP && board->state == RUNNING) {
 				if (e.button.button == SDL_BUTTON_LEFT) {
@@ -269,6 +253,8 @@ int main(int argc, char* args[])
 		}
 
 		//Clear screen
+		SDL_Rect viewport = {0, 0, tiles_x * tile_size, tiles_y * tile_size};
+		SDL_RenderSetViewport(gRenderer, &viewport);
 		SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
 		SDL_RenderClear(gRenderer);
 

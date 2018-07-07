@@ -2,72 +2,58 @@
 #include <stdlib.h>
 #include "minesweeper.h"
 
-Board *
-makeBoard(int width, int height)
-{
-	Board *board = malloc(sizeof(Board));
-	board->width = width;
-	board->height = height;
-	board->state = RUNNING;
-	board->tiles = malloc(width * sizeof(Tile*));
-	for (int x = 0; x < width; ++x) {
-		board->tiles[x] = malloc(height * sizeof(Tile));
-		for (int y = 0; y < height; ++y)
-			board->tiles[x][y] = (Tile){COVERED, false};
-	}
-	return board;
-}
-
-void freeBoard(Board *board) {
-	for (int i = 0; i < board->width; ++i) {
-		free(board->tiles[i]);
-	}
-	free(board->tiles);
-	free(board);
-}
-
-bool inBoard(Board *board, int x, int y)
-{
-	return x >= 0 && x < board->width && y >=0 && y < board->height;
-}
-
 Tile *
 getTile(Board *board, int x, int y)
 {
 	if (!(x >= 0 && x < board->width && y >=0 && y < board->height)) return NULL;
-	return &(board->tiles[x][y]);
+	return &(board->tiles[y * board->width + x]);
 }
 
-void populateBoard(Board *board, int numOfMines, unsigned seed)
+Board *
+makeBoard(int width, int height, int mineCount)
 {
-	srand(seed);
-	while (numOfMines > 0) {
-		int x = rand() % board->width;
-		int y = rand() % board->height;
-		Tile *targetTile = getTile(board, x, y);	
-		if (!targetTile->mined) {
-			targetTile->mined = true;
-			numOfMines -= 1;
-		}	
-	}
-	board->remainingTiles = board->height * board->width - numOfMines;
-	for (int x = 0; x < board->width; ++x)
-	for (int y = 0; y < board->height; ++y)
-		getTile(board, x, y)->minedNeighbours = minedNeighbours(board, x, y);
+	Board *board = malloc(sizeof(Board));
+	board->width = width;
+	board->height = height;
+	board->mineCount = mineCount;
+	board->tiles = malloc(width * height * sizeof(Tile));
+	return board;
 }
 
+void freeBoard(Board *board) {
+	free(board->tiles);
+	free(board);
+}
 
-int minedNeighbours(Board *board, int x, int y)
-{
-	int cnt = 0;
+void incrementNeighbours (Board *board, int x, int y) {
 	for (int dx = -1; dx <= 1; ++dx)
 	for (int dy = -1; dy <= 1; ++dy) {
-		if (dx == 0 && dy == 0) continue;
 		Tile *targetTile = getTile(board, x+dx, y+dy);
-		if (targetTile && targetTile->mined)
-			++cnt;
+		if (targetTile)
+			targetTile->minedNeighbours += 1;
 	}
-	return cnt;
+}
+
+void resetBoard(Board *board, unsigned seed)
+{
+	board->state = RUNNING;
+	board->flagCount = 0;
+	board->coveredTiles = board->width * board->height;
+	for (int x = 0; x < board->width; ++x)
+	for (int y = 0; y < board->height; ++y) {
+		*getTile(board, x, y) = (Tile){.state = COVERED, .mined = false, .minedNeighbours = 0};
+	}
+	srand(seed);
+	int remainingMines = board->mineCount;
+	while (remainingMines > 0) {
+		int x = rand() % board->width;
+		int y = rand() % board->height;
+		Tile *targetTile = getTile(board, x, y);
+		if (targetTile->mined) continue;
+		targetTile->mined = true;
+		remainingMines -= 1;
+		incrementNeighbours(board, x, y);
+	}
 }
 
 void flagTile(Board *board, int x, int y)
@@ -78,12 +64,13 @@ void flagTile(Board *board, int x, int y)
 
 	if (targetTile->state == FLAGGED) {
 		targetTile->state = COVERED;
-		board->remainingTiles += 1;
+		board->flagCount -= 1;
 	} else {
 		targetTile->state = FLAGGED;
-		board->remainingTiles -= 1;
+		board->flagCount += 1;
 	}
-}	
+}
+
 
 void uncoverTile(Board *board, int x, int y)
 {
@@ -92,16 +79,10 @@ void uncoverTile(Board *board, int x, int y)
 
 	if (targetTile->state != COVERED) return;
 	targetTile->state = UNCOVERED;
+	board->coveredTiles -= 1;
 
 	if (targetTile->mined) {
 		board->state = LOST;
-		return;
-	}
-
-	board->remainingTiles -= 1;
-
-	if (board->remainingTiles <= 0) {
-		board->state = WON;
 		return;
 	}
 
@@ -112,4 +93,14 @@ void uncoverTile(Board *board, int x, int y)
 			uncoverTile(board, x + dx, y + dy);
 		}
 	}
-}	
+
+	if (board->coveredTiles <= board->mineCount) {
+		board->state = WON;
+		for (int x = 0; x < board->width; ++x)
+		for (int y = 0; y < board->height; ++y) {
+			Tile *tile = getTile(board, x, y);
+			if (tile->mined)
+				tile->state = FLAGGED;
+		}
+	}
+}
