@@ -1,11 +1,11 @@
 BUILD_DIR = ./build
 RES_DIR = ./res
-BIN = main
+BIN = ms
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:%.c=$(BUILD_DIR)/%.o)
 DEP = $(OBJ:%.o=%.d)
 CCFLAGS += -Wall
-CPPFLAGS += -I/usr/include/SDL2 -D_REENTRANT -MMD -MP -Wall -g
+CPPFLAGS += -I/usr/include/SDL2 -D_REENTRANT -MMD -MP -Wall -O3
 LDFLAGS += -L/usr/lib
 LDLIBS += -lSDL2 -lSDL2_image -lSDL2_ttf
 

@@ -260,12 +260,13 @@ SDL_Texture * renderText(char *text, SDL_Color color) {
 
 void displayTime(unsigned time, SDL_Color color) {
 	char timeText[100];
-	sprintf(timeText, "%.3f", time/1000.0);
+	sprintf(timeText, "%d:%02d.%03d", time/60000, (time % 60000) / 1000, time % 1000);
 	SDL_Texture* timeTexture = renderText(timeText, color);
 	SDL_Rect timeField = {20, 0, 0, 0};
 	SDL_QueryTexture(timeTexture, NULL, NULL, &timeField.w, &timeField.h);
 	timeField.y = (uiViewport.h - timeField.h) / 2;
 	SDL_RenderCopy(gRenderer, timeTexture, NULL, &timeField);
+	SDL_DestroyTexture(timeTexture);
 }	
 
 void displayFlagCount(Board *b) {
@@ -277,6 +278,7 @@ void displayFlagCount(Board *b) {
 	field.x = uiViewport.w - field.w - 20;
 	field.y = (uiViewport.h - field.h) / 2;
 	SDL_RenderCopy(gRenderer, texture, NULL, &field);
+	SDL_DestroyTexture(texture);
 }	
 
 int main(int argc, char* args[])
@@ -304,6 +306,8 @@ int main(int argc, char* args[])
 		return 1;
 	}
 
+	Board *board = NULL;
+
 	//Start up SDL and create window
 	if (!init()) {
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
@@ -320,7 +324,7 @@ int main(int argc, char* args[])
 	//Main loop flag
 	bool quit = false;
 
-	Board *board = makeBoard(tiles_x, tiles_y, mine_count);
+	board = makeBoard(tiles_x, tiles_y, mine_count);
 	resetBoard(board, time(NULL));
 	renderBoard(board);
 
