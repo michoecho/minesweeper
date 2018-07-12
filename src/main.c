@@ -10,6 +10,8 @@
 #include <assert.h>
 #include "minesweeper.h"
 #include "stopwatch.h"
+#include "sdl_helpers.h"
+#include "helper_routines.h"
 
 bool init();
 bool loadMedia();
@@ -53,9 +55,6 @@ bool init()
 				"Warning: Linear texture filtering not enabled!");
 	}
 
-	gResPath = SDL_GetBasePath();
-	if (!gResPath) gResPath = SDL_strdup("./");
-	
 	gWindow = SDL_CreateWindow("Minesweeper", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 			boardViewport.w, boardViewport.h + uiViewport.h, SDL_WINDOW_SHOWN);
 	if (gWindow == NULL) {
@@ -95,39 +94,10 @@ bool init()
 	return true;
 }
 
-SDL_Surface* loadSurface(char* relPath)
-{
-	char path[4096];
-	strcpy(path, gResPath);
-	strcat(path, relPath);
-
-	SDL_Surface* loadedSurface = IMG_Load(path);
-	if (loadedSurface == NULL) {
-		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
-				"Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
-	}
-
-	return loadedSurface;
-}
-
-SDL_Texture* loadTexture(char* relPath)
-{
-	SDL_Surface* loadedSurface = loadSurface(relPath);
-	SDL_Texture* loadedTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);
-	if(loadedTexture == NULL) {
-		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
-				"Unable to create texture from %s! SDL Error: %s\n", relPath, SDL_GetError());
-	}
-
-	//Get rid of old loaded surface
-	SDL_FreeSurface(loadedSurface);
-	return loadedTexture;
-}
-
 bool loadMedia()
 {
 	char *tiles = "res/tiles.png";
-	gTileTexture = loadTexture(tiles);
+	gTileTexture = loadTexture(tiles, gRenderer);
 
 	if (gTileTexture == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -229,39 +199,10 @@ void renderTime() {
 	SDL_RenderFillRect(gRenderer, &rect);
 }
 
-bool isNumber(char *string) {
-	if (!string || !*string) return false;
-	while (*string) {
-		if (!isdigit(*string)) return false;
-		++string;
-	}
-	return true;
-}
-
-SDL_Texture * renderText(char *text, SDL_Color color) {
-	//Render text surface
-	SDL_Surface* textSurface = TTF_RenderText_Blended( gFont, text, color);
-	if( textSurface == NULL ) {
-		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
-				"Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
-		return NULL;
-	}
-		//Create texture from surface pixels
-        SDL_Texture * texture = SDL_CreateTextureFromSurface( gRenderer, textSurface );
-	if( texture == NULL ) {
-		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
-				"Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
-	}
-
-	SDL_FreeSurface(textSurface);
-	
-	return texture;
-}
-
-void displayTime(unsigned time, SDL_Color color) {
+void displayTime(unsigned time) {
 	char timeText[100];
 	sprintf(timeText, "%d:%02d.%03d", time/60000, (time % 60000) / 1000, time % 1000);
-	SDL_Texture* timeTexture = renderText(timeText, color);
+	SDL_Texture* timeTexture = renderText(timeText, gFont, BLACK, gRenderer);
 	SDL_Rect timeField = {20, 0, 0, 0};
 	SDL_QueryTexture(timeTexture, NULL, NULL, &timeField.w, &timeField.h);
 	timeField.y = (uiViewport.h - timeField.h) / 2;
@@ -272,7 +213,7 @@ void displayTime(unsigned time, SDL_Color color) {
 void displayFlagCount(Board *b) {
 	char text[100];
 	sprintf(text, "%d/%d", b->flagCount, b->mineCount);
-	SDL_Texture* texture = renderText(text, BLACK);
+	SDL_Texture* texture = renderText(text, gFont, BLACK, gRenderer);
 	SDL_Rect field;
 	SDL_QueryTexture(texture, NULL, NULL, &field.w, &field.h);
 	field.x = uiViewport.w - field.w - 20;
@@ -393,7 +334,7 @@ int main(int argc, char* args[])
 			renderHighlight();
 
 			SDL_RenderSetViewport(gRenderer, &uiViewport);
-			displayTime(readStopwatch(sw), BLACK);
+			displayTime(readStopwatch(sw));
 			displayFlagCount(board);
 		}
 
