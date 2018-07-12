@@ -21,6 +21,7 @@ makeBoard(int width, int height, int mineCount)
 }
 
 void freeBoard(Board *board) {
+	if (!board) return;
 	free(board->tiles);
 	free(board);
 }
