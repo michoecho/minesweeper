@@ -17,6 +17,11 @@ bool init();
 bool loadMedia();
 void finish();
 
+extern uint8_t _binary_res_tiles_png_start[];
+extern uint8_t _binary_res_tiles_png_end[];
+extern uint8_t _binary_res_font_ttf_start[];
+extern uint8_t _binary_res_font_ttf_end[];
+
 SDL_Window* gWindow = NULL;
 SDL_Renderer* gRenderer = NULL;
 SDL_Texture* gTileTexture = NULL;
@@ -26,6 +31,7 @@ TTF_Font *gFont = NULL;
 
 int tiles_x = 30;
 int tiles_y = 16;
+int mine_count = 99;
 int uiFontSize = 16;
 int uiBarSize = 24;
 int tile_size = 24;
@@ -96,20 +102,21 @@ bool init()
 
 bool loadMedia()
 {
-	char *tiles = "res/tiles.png";
-	gTileTexture = loadTexture(tiles, gRenderer);
+	gTileTexture = loadTextureFromMemory(_binary_res_tiles_png_start, _binary_res_tiles_png_end - _binary_res_tiles_png_start, gRenderer);
 
 	if (gTileTexture == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-				"Unable to load image %s! SDL Error: %s\n", tiles, SDL_GetError());
+				"Unable to load tiles!");
 		return false;
 	}
 	
-	gFont = TTF_OpenFont( "res/font.ttf", uiFontSize);
+	gFont = loadFontFromMemory(_binary_res_font_ttf_start,
+			_binary_res_font_ttf_end - _binary_res_font_ttf_start,
+			uiFontSize);
 	if( gFont == NULL )
 	{
 		SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION,
-			"Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
+			"Failed to load font!");
 		return false;
 	}
 	return true;
@@ -224,26 +231,28 @@ void displayFlagCount(Board *b) {
 
 int main(int argc, char* args[])
 {
-	if (argc != 5) {
-		fprintf(stdout, "Usage: minesweeper tiles_x tiles_y mine_count tile_size\n");
+	if (argc == 5) {
+		for (int i = 1; i <= 4; ++i) {
+			if (!isNumber(args[i])) {
+				fprintf(stderr, "Invalid arguments");
+				return 1;
+			}
+		}
+		tiles_x = strtol(args[1], NULL, 10);
+		tiles_y = strtol(args[2], NULL, 10);
+		mine_count = strtol(args[3], NULL, 10);
+		tile_size = strtol(args[4], NULL, 10);
+	} else if (argc != 1) {
+		fprintf(stderr, "Usage:\n\
+				minesweeper\n\
+				minesweeper tiles_x tiles_y mine_count tile_size\n");
 		return 1;
 	}
-	for (int i = 1; i <= 4; ++i) {
-		if (!isNumber(args[i])) {
-			fprintf(stdout, "Usage: minesweeper tiles_x tiles_y mine_count tile_size\n");
-			return 1;
-		}
-	}
-
-	tiles_x = strtol(args[1], NULL, 10);
-	tiles_y = strtol(args[2], NULL, 10);
-	int mine_count = strtol(args[3], NULL, 10);
-	tile_size = strtol(args[4], NULL, 10);
 	boardViewport = (SDL_Rect){0, uiBarSize, tiles_x * tile_size, tiles_y * tile_size};
 	uiViewport = (SDL_Rect){0, 0, tiles_x * tile_size, uiBarSize};
 
 	if (mine_count > tiles_x * tiles_y || tiles_x <= 0 || tiles_y <= 0 || tile_size <= 0) {
-		fprintf(stdout, "Invalid options.");
+		fprintf(stdout, "Invalid arguments.");
 		return 1;
 	}
 

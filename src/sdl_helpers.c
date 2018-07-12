@@ -69,10 +69,42 @@ SDL_Surface* loadSurface(char* relPath)
 	SDL_Surface* loadedSurface = IMG_Load(path);
 	if (loadedSurface == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
-				"Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
+				"Unable to load image %s! IMG Error: %s\n", path, IMG_GetError());
 	}
 
 	return loadedSurface;
+}
+
+SDL_Surface* loadSurfaceFromMemory(void *ptr, int size)
+{
+	SDL_RWops *ops = SDL_RWFromConstMem(ptr, size);
+	if (ops == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
+				"SDL Error: %s\n", SDL_GetError());
+	}
+	SDL_Surface* loadedSurface = IMG_Load_RW(ops, 0);
+	if (loadedSurface == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
+				"Unable to load surface from memory! IMG Error: %s\n", IMG_GetError());
+	}
+
+	return loadedSurface;
+}
+
+TTF_Font* loadFontFromMemory(void *ptr, int size, int fontSize)
+{
+	SDL_RWops *ops = SDL_RWFromConstMem(ptr, size);
+	if (ops == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
+				"SDL Error: %s\n", SDL_GetError());
+	}
+	TTF_Font* loadedFont = TTF_OpenFontRW(ops, 0, fontSize);
+	if (loadedFont == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_VIDEO,
+				"Unable to load font from memory! IMG Error: %s\n", IMG_GetError());
+	}
+
+	return loadedFont;
 }
 
 SDL_Texture* loadTexture(char* relPath, SDL_Renderer *renderer)
@@ -82,6 +114,20 @@ SDL_Texture* loadTexture(char* relPath, SDL_Renderer *renderer)
 	if(loadedTexture == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
 				"Unable to create texture from %s! SDL Error: %s\n", relPath, SDL_GetError());
+	}
+
+	//Get rid of old loaded surface
+	SDL_FreeSurface(loadedSurface);
+	return loadedTexture;
+}
+
+SDL_Texture* loadTextureFromMemory(void *beg, int size, SDL_Renderer *renderer)
+{
+	SDL_Surface* loadedSurface = loadSurfaceFromMemory(beg, size);
+	SDL_Texture* loadedTexture = SDL_CreateTextureFromSurface(renderer, loadedSurface);
+	if (loadedTexture == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_RENDER,
+				"Unable to create texture from memory! SDL Error: %s\n", SDL_GetError());
 	}
 
 	//Get rid of old loaded surface
